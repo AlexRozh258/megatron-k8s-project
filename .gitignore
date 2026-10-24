@@ -1,0 +1,19 @@
+# Terraform стани та локальні конфіги з токенами
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform/
+.terraform.lock.hcl
+
+# Ansible кеш та приватні ключі
+*.retry
+*.vault_password
+id_rsa
+id_ed25519
+
+# OS / IDE файли
+.DS_Store
+*.log
+.vscode/
+.idea/
