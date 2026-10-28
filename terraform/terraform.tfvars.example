@@ -1,6 +1,0 @@
-proxmox_api_url          = "https://192.168.5.200:8006/api2/json"
-proxmox_api_token_id     = "terraform-user@pve!terraform-token"
-proxmox_api_token_secret = "YOUR_PROXMOX_SECRET_HERE"
-template_name            = "ubuntu-24.04"
-target_node              = "pve"
-storage_pool             = "local-2TB"
