@@ -1,0 +1,184 @@
+---
+- name: Prepare Nodes
+  hosts: k8s-cluster
+  become: yes
+  tasks:
+
+    - name: Disable swap
+      command: swapoff -a
+      when: ansible_swaptotal_mb > 0
+
+    - name: Remove swap from /etc/fstab to keep it disabled on reboot
+      replace:
+        path: /etc/fstab
+        regexp: '^([^#].*?\sswap\s+sw\s+.*)$'
+        replace: '# \1'
+
+    - name: Ensure overlay and br_netfilter modules are loaded
+      modprobe:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - overlay
+        - br_netfilter
+
+    - name: Configure sysctl for Kubernetes networking
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+      loop:
+        - { name: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+        - { name: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+        - { name: 'net.ipv4.ip_forward', value: '1' }
+
+    - name: Install dependencies for Docker and K8s
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - software-properties-common
+        state: present
+        update_cache: yes
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
+        state: present
+
+    - name: Install Docker Engine and Containerd
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+        state: present
+        update_cache: yes
+
+    - name: Create containerd directory
+      file:
+        path: /etc/containerd
+        state: directory
+        mode: '0755'
+
+    - name: Generate default containerd configuration
+      shell: containerd config default > /etc/containerd/config.toml
+      args:
+        creates: /etc/containerd/config.toml
+
+    - name: Enable SystemdCgroup in containerd config
+      lineinfile:
+        path: /etc/containerd/config.toml
+        regexp: 'SystemdCgroup = false'
+        line: 'SystemdCgroup = true'
+        state: present
+
+    - name: Ensure Docker and containerd services are running
+      systemd:
+        name: "{{ item }}"
+        state: restarted
+        enabled: yes
+      loop:
+        - docker
+        - containerd
+
+    - name: Add student user to docker group
+      user:
+        name: student
+        groups: docker
+        append: yes
+
+    - name: Add Kubernetes GPG key
+      apt_key:
+        url: https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key
+        state: present
+
+    - name: Add Kubernetes repository
+      apt_repository:
+        repo: deb [arch=amd64] https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /
+        state: present
+
+    - name: Install kubelet, kubeadm, kubectl
+      apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
+        update_cache: yes
+
+    - name: Hold Kubernetes packages from automatic updates
+      dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop:
+        - kubelet
+        - kubeadm
+        - kubectl
+
+    - name: Initialize Kubernetes Master Node
+      command: kubeadm init --pod-network-cidr=10.244.0.0/16
+      when: inventory_hostname == '192.168.5.221'
+      register: kubeadm_init
+      run_once: true
+      args:
+        creates: /etc/kubernetes/admin.conf
+
+    - name: Create .kube directory for student user on master
+      file:
+        path: /home/student/.kube
+        state: directory
+        owner: student
+        group: student
+        mode: '0755'
+      when: inventory_hostname == '192.168.5.221'
+
+    - name: Copy admin.conf to student user's kube config on master
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /home/student/.kube/config
+        remote_src: yes
+        owner: student
+        group: student
+        mode: '0600'
+      when: inventory_hostname == '192.168.5.221'
+
+    - name: Install Flannel Network Plugin on Master
+      become_user: student
+      command: kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+      when: inventory_hostname == '192.168.5.221'
+
+    - name: Get join command for worker nodes
+      command: kubeadm token create --print-join-command
+      when: inventory_hostname == '192.168.5.221'
+      register: join_command_raw
+      run_once: true
+
+    - name: Set join command as a fact for all nodes
+      set_fact:
+        join_command: "{{ join_command_raw.stdout }}"
+      when: inventory_hostname == '192.168.5.221'
+
+    - name: Distribute join command to group
+      set_fact:
+        join_command: "{{ hostvars['192.168.5.221']['join_command'] }}"
+      when: inventory_hostname != '192.168.5.221'
+
+    - name: Join Worker Nodes to the Cluster
+      command: "{{ hostvars['192.168.5.221']['join_command'] }}"
+      when: inventory_hostname != '192.168.5.221'
+      register: worker_join
+
+    - name: Show join results
+      debug:
+        msg: "{{ worker_join.stdout }}"
+      when: inventory_hostname != '192.168.5.221'
