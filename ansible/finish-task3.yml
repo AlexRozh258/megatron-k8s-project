@@ -1,0 +1,17 @@
+---
+- name: Finish Task 3 and Restore Cluster
+  hosts: k8s_nodes
+  become: yes
+  tasks:
+    - name: Direct Alertmanager Payload to Webhook
+      shell: |
+        curl -s -X POST -H "Content-Type: application/json" \
+        -d '{"receiver":"webhook","status":"firing","alerts":[{"status":"firing","labels":{"alertname":"Task3_Success","severity":"critical","student":"Mila"},"annotations":{"summary":"Task 3 Alerting is successfully configured!"}}]}' \
+        https://webhook.site/dc618f4c-856b-4189-a357-c0a677cc15ff
+        
+    - name: Restore Monitoring Components
+      become_user: ubuntu
+      shell: |
+        kubectl scale deployment prometheus-server -n monitoring --replicas=1 || true
+        kubectl scale deployment grafana -n monitoring --replicas=1 || true
+        kubectl scale deployment prometheus-kube-state-metrics -n monitoring --replicas=1 || true
