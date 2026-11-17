@@ -3,6 +3,9 @@ FROM nginxinc/nginx-unprivileged:1.27-alpine-slim
 LABEL maintainer="Dev Team"
 LABEL description="Secure non-root Nginx static webpage"
 
+USER root
+RUN apk update && apk upgrade --no-cache
+
 COPY --chown=nginx:nginx html/ /usr/share/nginx/html/
 
 USER 101
