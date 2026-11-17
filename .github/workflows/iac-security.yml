@@ -1,0 +1,16 @@
+name: IaC Shift-Left Security
+
+on: [push, pull_request]
+
+jobs:
+  iac-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+      - name: Run Trivy Config & Secret Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'config'
+          scan-ref: './terraform'
+          severity: 'HIGH,CRITICAL'
+          
