@@ -1,0 +1,43 @@
+---
+- name: Complete Task 4 (Falco + Fluent Bit)
+  hosts: k8s_nodes
+  become: yes
+  tasks:
+    - name: Add Helm Repositories
+      become_user: ubuntu
+      shell: |
+        helm repo add falcosecurity https://falcosecurity.github.io/charts
+        helm repo add fluent https://fluent.github.io/helm-charts
+        helm repo update
+
+    - name: Drop OS Caches (Free up RAM)
+      shell: sync; echo 3 > /proc/sys/vm/drop_caches
+
+    - name: Install Fluent Bit (Alternative Log Agent for K8s)
+      become_user: ubuntu
+      shell: |
+        cat << 'VAL' > /home/ubuntu/fluentbit-values.yaml
+        resources:
+          requests:
+            memory: "0Mi"
+            cpu: "0m"
+          limits:
+            memory: "50Mi"
+        VAL
+        helm upgrade --install fluent-bit fluent/fluent-bit --namespace monitoring -f /home/ubuntu/fluentbit-values.yaml
+
+    - name: Install Falco (Security Logs)
+      become_user: ubuntu
+      shell: |
+        cat << 'VAL' > /home/ubuntu/falco-values.yaml
+        falco:
+          resources:
+            requests:
+              memory: "0Mi"
+              cpu: "0m"
+            limits:
+              memory: "100Mi"
+        falcosidekick:
+          enabled: false
+        VAL
+        helm upgrade --install falco falcosecurity/falco --namespace monitoring -f /home/ubuntu/falco-values.yaml
