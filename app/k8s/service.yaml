@@ -5,6 +5,10 @@ metadata:
   namespace: default
   labels:
     app: megatron-web
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9113"
+    prometheus.io/path: "/metrics"
 spec:
   type: NodePort
   selector:
@@ -14,3 +18,6 @@ spec:
       port: 80
       targetPort: 8080
       nodePort: 30080
+    - name: metrics
+      port: 9113
+      targetPort: 9113
