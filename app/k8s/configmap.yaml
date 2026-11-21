@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: megatron-app-config
+  namespace: default
+  labels:
+    app: megatron-web
+data:
+  APP_ENV: "production-proxmox"
+  CLUSTER_NODE_IP: "192.168.5.151"
+  METRICS_PORT: "9113"
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="uk">
+    <head>
+        <meta charset="UTF-8">
+        <title>Megatron K8s App</title>
+        <style>
+            body { font-family: sans-serif; text-align: center; padding-top: 50px; background-color: #f4f6f8; }
+            .card { background: white; padding: 30px; border-radius: 8px; display: inline-block; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+            h1 { color: #1e3a8a; }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h1>Megatron Cluster Running</h1>
+            <p>Додаток розгорнуто у кластері Kubernetes (Proxmox nodes).</p>
+            <p>Non-root контейнер успішно працює!</p>
+        </div>
+    </body>
+    </html>
+  default.conf: |
+    log_format json_logs escape=json '{"time":"$time_iso8601","remote_addr":"$remote_addr","method":"$request_method","uri":"$request_uri","status":$status,"bytes":$body_bytes_sent,"user_agent":"$http_user_agent"}';
+
+    server {
+        listen 8080;
+        server_name _;
+
+        access_log /dev/stdout json_logs;
+        error_log /dev/stderr warn;
+
+        location / {
+            root /usr/share/nginx/html;
+            index index.html;
+        }
+    }
+
+    server {
+        listen 127.0.0.1:8081;
+        server_name localhost;
+
+        access_log off;
+
+        location /stub_status {
+            stub_status;
+            allow 127.0.0.1;
+            deny all;
+        }
+    }
